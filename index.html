@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upscale 8000</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=Prompt:wght@600&display=swap">
+<style>
+/* Layout: ซ้าย = ตั้งค่า (sticky), ขวา = รายการไฟล์ + พรีวิว ก่อน/หลัง */
+:root{
+  --bg:#f8f6fb; --panel:#ffffff; --fg:#3b3652; --muted:#8c87a3; --line:#ebe6f3;
+  --accent:#b9a8f0; --accent-fg:#2b2450; --soft:#ece6fb; --mint:#cdeee0; --peach:#fde0d4;
+  --ok:#3f9b72; --warn:#c08a3e; --field:#f4f1f9;
+  --f-display:'Prompt','IBM Plex Sans Thai',sans-serif;
+  --f-body:'IBM Plex Sans Thai','Noto Sans Thai',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#1b1926; --panel:#242133; --fg:#ece8f7; --muted:#9a95b3; --line:#34304a;
+  --accent:#b9a8f0; --accent-fg:#241d45; --soft:#332e4d; --mint:#2d4a40; --peach:#4d3a37;
+  --ok:#7fd1ab; --warn:#e3b56a; --field:#1f1c2c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1b1926; --panel:#242133; --fg:#ece8f7; --muted:#9a95b3; --line:#34304a;
+  --accent:#b9a8f0; --accent-fg:#241d45; --soft:#332e4d; --mint:#2d4a40; --peach:#4d3a37;
+  --ok:#7fd1ab; --warn:#e3b56a; --field:#1f1c2c; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto}
+header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+h1{font-family:var(--f-display);font-weight:600;font-size:28px;margin:0;letter-spacing:-.01em}
+header p{margin:0;color:var(--muted)}
+.grid{display:grid;grid-template-columns:340px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:0 8px 30px -18px rgba(90,70,150,.25)}
+.settings{position:sticky;top:16px;display:grid;gap:18px}
+@media (max-width:860px){.settings{position:static}}
+fieldset{border:0;padding:0;margin:0;display:grid;gap:8px;min-width:0}
+legend{padding:0;margin-bottom:6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{border:1px solid var(--line);background:var(--field);color:var(--fg);border-radius:99px;padding:6px 13px;font:inherit;font-size:14px;cursor:pointer;font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.chip:focus-visible,input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=number],select{background:var(--field);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-family:var(--f-mono);font-size:14px;width:100%;min-width:0}
+.field{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.field span{color:var(--muted);font-size:13px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--field);border-radius:12px;padding:4px;gap:4px}
+.seg button{border:0;background:transparent;color:var(--muted);padding:8px;border-radius:9px;font:inherit;font-size:14px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--fg);box-shadow:0 1px 4px rgba(90,70,150,.18)}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.calc{font-family:var(--f-mono);font-size:13px;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:12px;line-height:1.7}
+.calc b{font-weight:500;color:var(--fg);background:var(--soft);border-radius:4px;padding:0 4px}
+.go{background:var(--accent);color:var(--accent-fg);border:0;border-radius:14px;padding:13px;font:inherit;font-weight:600;font-size:16px;cursor:pointer}
+.go:hover:not(:disabled){filter:brightness(.97)}
+.go:disabled{opacity:.45;cursor:not-allowed}
+.drop{border:2px dashed var(--accent);border-radius:20px;padding:38px 16px;display:block;text-align:center;cursor:pointer;background:var(--panel);transition:border-color .15s}
+.drop.over,.drop:hover{background:var(--soft)}
+.drop strong{font-family:var(--f-display);font-size:19px;display:block;margin-bottom:4px}
+.drop span{color:var(--muted);font-size:14px}
+#file{display:none}
+.list{display:grid;gap:14px;margin-top:16px}
+.item{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:16px;display:grid;gap:12px}
+.item-h{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.item-h .nm{font-weight:600;min-width:0;overflow-wrap:anywhere;flex:1 1 180px}
+.meta{font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
+.badge{font-size:12px;border-radius:99px;padding:2px 10px;border:1px solid var(--line);color:var(--muted)}
+.badge.run{color:var(--warn);background:var(--peach);border-color:transparent}
+.badge.done{color:var(--ok);background:var(--mint);border-color:transparent}
+.bar{height:5px;background:var(--soft);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:560px){.cmp{grid-template-columns:1fr}}
+.cmp figure{margin:0;display:grid;gap:4px;min-width:0}
+.cmp figcaption{font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.view{aspect-ratio:1/1;max-height:420px;width:100%;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  background:repeating-conic-gradient(var(--field) 0 25%,var(--panel) 0 50%) 0 0/16px 16px;display:grid;place-items:center}
+.view img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.view.zoom{display:block;overflow:auto;cursor:zoom-out}
+.view.zoom img{max-width:none;max-height:none;image-rendering:pixelated;cursor:zoom-out}
+.view{cursor:zoom-in}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--field);color:var(--fg);border-radius:99px;padding:7px 16px;font:inherit;font-size:14px;cursor:pointer}
+.btn.pri{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.top-acts{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;margin-top:16px}
+.err{color:#c4566b;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Upscale 8000</h1>
+  <p>ขยายภาพจาก GPT สูงสุด 8000 px พร้อมตั้งค่า DPI และเพิ่มความคมชัด ประมวลผลในเครื่อง ไม่อัพโหลดไฟล์ไปที่ไหน</p>
+</header>
+
+<div class="grid">
+<aside class="panel settings" aria-label="ตั้งค่า">
+  <fieldset>
+    <legend>วิธีกำหนดขนาด</legend>
+    <div class="seg" role="group">
+      <button type="button" id="modePx" aria-pressed="true">ระบุ px</button>
+      <button type="button" id="modeX" aria-pressed="false">ขยายเป็น ×</button>
+    </div>
+  </fieldset>
+
+  <fieldset id="pxBox">
+    <legend>ด้านที่ยาวที่สุด (px)</legend>
+    <div class="row" id="pxPresets"></div>
+    <div class="field"><input type="number" id="px" min="64" max="8000" step="1" value="8000" aria-label="ด้านที่ยาวที่สุด"><span>สูงสุด 8000</span></div>
+  </fieldset>
+
+  <fieldset id="xBox" hidden>
+    <legend>ตัวคูณ</legend>
+    <div class="row" id="xPresets"></div>
+    <div class="field"><input type="number" id="xm" min="0.5" max="16" step="0.1" value="4" aria-label="ตัวคูณ"><span>ถูกจำกัดที่ 8000 px</span></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>DPI (ฝังในไฟล์)</legend>
+    <div class="row" id="dpiPresets"></div>
+    <div class="field"><input type="number" id="dpi" min="1" max="2400" step="1" value="300" aria-label="DPI"><span>dpi</span></div>
+    <p class="hint">DPI ไม่เปลี่ยนจำนวนพิกเซล ใช้บอกโปรแกรมพิมพ์/Photoshop ว่าภาพพิมพ์ได้ใหญ่เท่าไร รองรับ PNG และ JPG</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>ความคมชัด</legend>
+    <div class="field"><input type="range" id="amt" min="0" max="200" step="5" value="60" aria-label="ความคมชัด"><span class="meta" id="amtV">60%</span></div>
+    <div class="field"><select id="rad" aria-label="รัศมี"><option value="1">รัศมีเล็ก (ลายเส้นละเอียด)</option><option value="2">รัศมีกลาง (ภาพรวมคมขึ้น)</option></select><span></span></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>รูปแบบไฟล์</legend>
+    <div class="field"><select id="fmt" aria-label="รูปแบบ"><option value="png">PNG (ไม่สูญเสีย)</option><option value="jpg">JPG</option><option value="webp">WebP (ไม่มี DPI)</option></select><span></span></div>
+    <div class="field" id="qBox" hidden><input type="range" id="q" min="60" max="100" value="95" aria-label="คุณภาพ"><span class="meta" id="qV">95</span></div>
+  </fieldset>
+
+  <div class="calc" id="calc" aria-live="polite">เลือกไฟล์เพื่อดูขนาดผลลัพธ์</div>
+  <button class="go" id="go" disabled>เริ่มอัพสเกล</button>
+</aside>
+
+<main>
+  <label class="drop" id="drop" for="file">
+    <strong>ลากไฟล์ภาพมาวางที่นี่</strong>
+    <span>หรือคลิกเพื่อเลือก · PNG, JPG, WebP · เลือกได้หลายไฟล์</span>
+  </label>
+  <input type="file" id="file" accept="image/*" multiple>
+  <div class="top-acts" id="topActs" hidden>
+    <span class="meta" id="count"></span>
+    <div class="acts"><button class="btn" id="clear">ล้างทั้งหมด</button><button class="btn pri" id="dlAll" disabled>ดาวน์โหลดทั้งหมด</button></div>
+  </div>
+  <div class="list" id="list"></div>
+</main>
+</div>
+</div>
+
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const MAX=8000;
+const state={mode:'px',items:[],busy:false};
+const S={px:$('#px'),xm:$('#xm'),dpi:$('#dpi'),amt:$('#amt'),rad:$('#rad'),fmt:$('#fmt'),q:$('#q')};
+
+function chips(box,vals,input,fmt){
+  vals.forEach(v=>{const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=fmt?fmt(v):v;
+    b.onclick=()=>{input.value=v;sync()};b.dataset.v=v;box.appendChild(b)});
+}
+chips($('#pxPresets'),[2048,4000,6000,8000],S.px);
+chips($('#xPresets'),[2,3,4,6,8],S.xm,v=>'×'+v);
+chips($('#dpiPresets'),[72,150,300,600],S.dpi);
+
+function setMode(m){state.mode=m;
+  $('#modePx').setAttribute('aria-pressed',m==='px');$('#modeX').setAttribute('aria-pressed',m==='x');
+  $('#pxBox').hidden=m!=='px';$('#xBox').hidden=m!=='x';sync()}
+$('#modePx').onclick=()=>setMode('px');$('#modeX').onclick=()=>setMode('x');
+
+function target(w,h){
+  let long=Math.max(w,h),t;
+  if(state.mode==='px')t=+S.px.value||long;else t=long*(+S.xm.value||1);
+  t=Math.round(Math.min(MAX,Math.max(16,t)));
+  const f=t/long;return {w:Math.max(1,Math.round(w*f)),h:Math.max(1,Math.round(h*f)),f};
+}
+function sync(){
+  document.querySelectorAll('#pxPresets .chip').forEach(c=>c.setAttribute('aria-pressed',state.mode==='px'&&+c.dataset.v===+S.px.value));
+  document.querySelectorAll('#xPresets .chip').forEach(c=>c.setAttribute('aria-pressed',+c.dataset.v===+S.xm.value));
+  document.querySelectorAll('#dpiPresets .chip').forEach(c=>c.setAttribute('aria-pressed',+c.dataset.v===+S.dpi.value));
+  $('#amtV').textContent=S.amt.value+'%';$('#qV').textContent=S.q.value;
+  const f=S.fmt.value;$('#qBox').hidden=f==='png';
+  S.dpi.disabled=f==='webp';
+  const it=state.items[0],c=$('#calc');
+  if(!it){c.textContent='เลือกไฟล์เพื่อดูขนาดผลลัพธ์';return}
+  const t=target(it.w,it.h),d=Math.max(1,+S.dpi.value||72);
+  const inch=[t.w/d,t.h/d],cm=inch.map(v=>v*2.54);
+  c.innerHTML=`ต้นฉบับ <b>${it.w}×${it.h}</b> px<br>ผลลัพธ์ <b>${t.w}×${t.h}</b> px (×${t.f.toFixed(2)})<br>`+
+   (f==='webp'?'WebP ไม่เก็บค่า DPI':`ที่ ${d} dpi พิมพ์ได้ <b>${cm[0].toFixed(1)}×${cm[1].toFixed(1)}</b> cm<br>(${inch[0].toFixed(1)}×${inch[1].toFixed(1)} นิ้ว)`)+
+   (state.items.length>1?`<br>แสดงตัวอย่างจากไฟล์แรก`:'');
+}
+Object.values(S).forEach(e=>e.addEventListener('input',sync));
+sync();
+
+/* ---------- ไฟล์ ---------- */
+const drop=$('#drop');
+['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',ev=>addFiles(ev.dataTransfer.files));
+$('#file').onchange=e=>{addFiles(e.target.files);e.target.value=''};
+window.addEventListener('paste',e=>{const f=[...(e.clipboardData?.files||[])];if(f.length)addFiles(f)});
+
+function addFiles(fl){
+  [...fl].filter(f=>f.type.startsWith('image/')).forEach(file=>{
+    const url=URL.createObjectURL(file),img=new Image();
+    const it={file,url,img,w:0,h:0,status:'wait',blob:null,outUrl:null,name:file.name.replace(/\.[^.]+$/,''),el:null,err:''};
+    img.onload=()=>{it.w=img.naturalWidth;it.h=img.naturalHeight;render(it);sync();upd()};
+    img.onerror=()=>{it.err='เปิดไฟล์นี้ไม่ได้';render(it)};
+    img.src=url;state.items.push(it);build(it);
+  });upd();
+}
+function build(it){
+  const el=document.createElement('div');el.className='item';it.el=el;$('#list').appendChild(el);render(it);
+}
+function badge(it){return it.status==='done'?'<span class="badge done">เสร็จแล้ว</span>':it.status==='run'?'<span class="badge run">กำลังทำ</span>':'<span class="badge">รอทำ</span>'}
+function render(it){
+  const out=it.out;
+  it.el.innerHTML=`<div class="item-h"><span class="nm">${esc(it.file.name)}</span>${badge(it)}
+    <span class="meta">${it.w?it.w+'×'+it.h+' px':''}${out?' → '+out.w+'×'+out.h+' px · '+(it.blob.size/1048576).toFixed(1)+' MB':''}</span></div>
+    ${it.err?`<div class="err">${it.err}</div>`:''}
+    <div class="bar"><i style="width:${it.p||0}%"></i></div>
+    <div class="cmp"><figure><figcaption>ก่อน</figcaption><div class="view" data-z><img alt="ต้นฉบับ" src="${it.url}"></div></figure>
+    <figure><figcaption>หลัง${out?' · คลิกเพื่อซูม 100%':''}</figcaption><div class="view" data-z>${it.outUrl?`<img alt="ผลลัพธ์" src="${it.outUrl}">`:''}</div></figure></div>
+    <div class="acts"><button class="btn pri" data-dl ${it.blob?'':'disabled'}>ดาวน์โหลด</button><button class="btn" data-rm>ลบ</button></div>`;
+  it.el.querySelector('[data-dl]').onclick=()=>download(it);
+  it.el.querySelector('[data-rm]').onclick=()=>{if(state.busy)return;URL.revokeObjectURL(it.url);if(it.outUrl)URL.revokeObjectURL(it.outUrl);it.el.remove();state.items=state.items.filter(x=>x!==it);sync();upd()};
+  it.el.querySelectorAll('[data-z]').forEach(v=>v.onclick=()=>{
+    const img=v.querySelector('img');if(!img)return;v.classList.toggle('zoom');
+    if(v.classList.contains('zoom')){ // แสดงที่ขนาดจริงของไฟล์ในหน้านี้ จัดกึ่งกลาง
+      const nat=img.naturalWidth;img.style.width=nat+'px';requestAnimationFrame(()=>{v.scrollLeft=(v.scrollWidth-v.clientWidth)/2;v.scrollTop=(v.scrollHeight-v.clientHeight)/2});
+    }else img.style.width='';
+  });
+}
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function upd(){
+  const n=state.items.length;$('#topActs').hidden=!n;$('#count').textContent=n+' ไฟล์';
+  $('#go').disabled=state.busy||!state.items.some(i=>i.w);
+  $('#dlAll').disabled=!state.items.some(i=>i.blob);
+}
+$('#clear').onclick=()=>{if(state.busy)return;state.items.forEach(i=>{URL.revokeObjectURL(i.url);if(i.outUrl)URL.revokeObjectURL(i.outUrl)});state.items=[];$('#list').innerHTML='';sync();upd()};
+
+/* ---------- ประมวลผล ---------- */
+const tick=()=>new Promise(r=>setTimeout(r,0));
+function mk(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
+
+async function resize(img,tw,th){
+  let src=img,sw=img.naturalWidth,sh=img.naturalHeight,tmp=null;
+  while(sw!==tw||sh!==th){
+    let nw=tw>sw?Math.min(tw,sw*2):Math.max(tw,Math.ceil(sw/2));
+    let nh=nw===tw?th:Math.max(1,Math.round(sh*nw/sw));
+    const c=mk(nw,nh),x=c.getContext('2d');
+    x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.drawImage(src,0,0,nw,nh);
+    if(tmp){tmp.width=tmp.height=0}
+    tmp=c;src=c;sw=nw;sh=nh;await tick();
+  }
+  if(!tmp){tmp=mk(tw,th);const x=tmp.getContext('2d');x.drawImage(img,0,0)}
+  return tmp;
+}
+
+async function sharpen(canvas,amount,r,prog){
+  if(amount<=0)return;
+  const w=canvas.width,h=canvas.height,ctx=canvas.getContext('2d',{willReadFrequently:true});
+  const k=r===1?[1,2,1]:[1,4,6,4,1],ks=k.reduce((a,b)=>a+b),BAND=96;
+  for(let y0=0;y0<h;y0+=BAND){
+    const y1=Math.min(h,y0+BAND),ya=Math.max(0,y0-r),yb=Math.min(h,y1+r),bh=yb-ya;
+    const src=ctx.getImageData(0,ya,w,bh),d=src.data,tmp=new Float32Array(w*bh*3);
+    for(let y=0;y<bh;y++){const row=y*w;
+      for(let x=0;x<w;x++){
+        let a=0,b=0,c=0;
+        for(let i=-r;i<=r;i++){let xx=x+i;xx=xx<0?0:xx>=w?w-1:xx;const p=(row+xx)*4,kv=k[i+r];a+=d[p]*kv;b+=d[p+1]*kv;c+=d[p+2]*kv}
+        const o=(row+x)*3;tmp[o]=a/ks;tmp[o+1]=b/ks;tmp[o+2]=c/ks;
+      }}
+    const oh=y1-y0,out=ctx.createImageData(w,oh),od=out.data;
+    for(let y=0;y<oh;y++){const yy=y0+y-ya;
+      for(let x=0;x<w;x++){
+        let a=0,b=0,c=0;
+        for(let i=-r;i<=r;i++){let ry=yy+i;ry=ry<0?0:ry>=bh?bh-1:ry;const o=(ry*w+x)*3,kv=k[i+r];a+=tmp[o]*kv;b+=tmp[o+1]*kv;c+=tmp[o+2]*kv}
+        const p=(yy*w+x)*4,q=(y*w+x)*4;
+        od[q]=d[p]+amount*(d[p]-a/ks);od[q+1]=d[p+1]+amount*(d[p+1]-b/ks);od[q+2]=d[p+2]+amount*(d[p+2]-c/ks);od[q+3]=d[p+3];
+      }}
+    ctx.putImageData(out,0,y0);
+    prog(y1/h);await tick();
+  }
+}
+
+/* ---------- ฝัง DPI ---------- */
+const CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}
+  return b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=t[(c^b[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0}})();
+function pngDpi(buf,dpi){
+  const u=new Uint8Array(buf),ppm=Math.round(dpi/0.0254),parts=[u.subarray(0,8)];
+  let p=8,inserted=false;
+  const chunk=new Uint8Array(21),dv=new DataView(chunk.buffer);
+  dv.setUint32(0,9);chunk.set([0x70,0x48,0x59,0x73],4);dv.setUint32(8,ppm);dv.setUint32(12,ppm);chunk[16]=1;dv.setUint32(17,CRC(chunk.subarray(4,17)));
+  while(p<u.length){
+    const len=new DataView(u.buffer,u.byteOffset+p,4).getUint32(0),type=String.fromCharCode(u[p+4],u[p+5],u[p+6],u[p+7]),end=p+12+len;
+    if(type==='pHYs'){p=end;continue}
+    parts.push(u.subarray(p,end));
+    if(type==='IHDR'&&!inserted){parts.push(chunk);inserted=true}
+    p=end;
+  }
+  return new Blob(parts,{type:'image/png'});
+}
+function jpgDpi(buf,dpi){
+  const u=new Uint8Array(buf),d=Math.round(dpi);
+  if(u[2]===0xFF&&u[3]===0xE0&&u[6]===0x4A&&u[7]===0x46){
+    u[13]=1;u[14]=d>>8;u[15]=d&255;u[16]=d>>8;u[17]=d&255;return new Blob([u],{type:'image/jpeg'});
+  }
+  const app=new Uint8Array([0xFF,0xE0,0,16,0x4A,0x46,0x49,0x46,0,1,1,1,d>>8,d&255,d>>8,d&255,0,0]);
+  return new Blob([u.subarray(0,2),app,u.subarray(2)],{type:'image/jpeg'});
+}
+const toBlob=(c,m,q)=>new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('สร้างไฟล์ไม่สำเร็จ ลองลดขนาดหรือใช้ JPG')),m,q));
+
+async function encode(canvas,fmt,q,dpi){
+  const mime=fmt==='png'?'image/png':fmt==='jpg'?'image/jpeg':'image/webp';
+  let b=await toBlob(canvas,mime,q);
+  if(fmt==='png')return pngDpi(await b.arrayBuffer(),dpi);
+  if(fmt==='jpg')return jpgDpi(await b.arrayBuffer(),dpi);
+  return b;
+}
+
+async function run(){
+  if(state.busy)return;state.busy=true;upd();
+  const fmt=S.fmt.value,q=(+S.q.value)/100,dpi=Math.max(1,+S.dpi.value||72),amt=(+S.amt.value)/100,r=+S.rad.value;
+  for(const it of state.items){
+    if(!it.w)continue;
+    it.status='run';it.p=0;it.err='';if(it.outUrl){URL.revokeObjectURL(it.outUrl);it.outUrl=null}it.blob=null;it.out=null;
+    const bar=()=>{const i=it.el.querySelector('.bar i');if(i)i.style.width=it.p+'%'};
+    render(it);
+    try{
+      const t=target(it.w,it.h);
+      it.p=5;bar();await tick();
+      const c=await resize(it.img,t.w,t.h);it.p=30;bar();
+      await sharpen(c,amt,r,f=>{it.p=30+f*60;bar()});
+      it.p=92;bar();await tick();
+      it.blob=await encode(c,fmt,q,dpi);c.width=c.height=0;
+      it.out=t;it.outUrl=URL.createObjectURL(it.blob);it.ext=fmt;it.dpi=dpi;it.status='done';it.p=100;
+    }catch(e){it.status='wait';it.err=e.message||String(e)}
+    render(it);
+  }
+  state.busy=false;upd();
+}
+$('#go').onclick=run;
+
+function fname(it){const e=it.ext==='jpg'?'jpg':it.ext;return `${it.name}_${it.out.w}x${it.out.h}${it.ext==='webp'?'':'_'+it.dpi+'dpi'}.${e}`}
+function download(it){
+  if(!it.blob)return;const a=document.createElement('a');a.href=it.outUrl;a.download=fname(it);document.body.appendChild(a);a.click();a.remove();
+}
+$('#dlAll').onclick=async()=>{for(const it of state.items){if(it.blob){download(it);await new Promise(r=>setTimeout(r,400))}}};
+})();
+</script>
+</body>
+</html>
