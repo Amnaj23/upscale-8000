@@ -126,8 +126,9 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 
   <fieldset>
     <legend>ความคมชัด</legend>
-    <div class="field"><input type="range" id="amt" min="0" max="200" step="5" value="60" aria-label="ความคมชัด"><span class="meta" id="amtV">60%</span></div>
-    <div class="field"><select id="rad" aria-label="รัศมี"><option value="1">รัศมีเล็ก (ลายเส้นละเอียด)</option><option value="2">รัศมีกลาง (ภาพรวมคมขึ้น)</option></select><span></span></div>
+    <p class="hint" style="margin-bottom:2px">ขยายด้วย Lanczos แล้วเสริมขอบอีกชั้น ภาพ GPT ที่ขยายมากควรอยู่ที่ 100–150%</p>
+    <div class="field"><input type="range" id="amt" min="0" max="300" step="5" value="100" aria-label="ความคมชัด"><span class="meta" id="amtV">100%</span></div>
+    <div class="field"><select id="rad" aria-label="รัศมี"><option value="0">รัศมีอัตโนมัติ (แนะนำ)</option><option value="1">เล็ก · ลายเส้น/ตัวอักษรละเอียด</option><option value="2">กลาง · ภาพทั่วไป</option><option value="4">ใหญ่ · ภาพขยายมากๆ</option></select><span></span></div>
   </fieldset>
 
   <fieldset>
@@ -250,6 +251,45 @@ $('#clear').onclick=()=>{if(state.busy)return;state.items.forEach(i=>{URL.revoke
 const tick=()=>new Promise(r=>setTimeout(r,0));
 function mk(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
 
+function lzk(x){x=Math.abs(x);if(x<1e-8)return 1;if(x>=3)return 0;const p=Math.PI*x;return 3*Math.sin(p)*Math.sin(p/3)/(p*p)}
+function weights(nOut,nIn){
+  const scale=Math.max(1,nIn/nOut),sup=3*scale,maxT=Math.ceil(sup*2)+2;
+  const start=new Int32Array(nOut),cnt=new Int32Array(nOut),w=new Float32Array(nOut*maxT);
+  for(let o=0;o<nOut;o++){
+    const c=(o+.5)*nIn/nOut-.5;let lo=Math.max(0,Math.ceil(c-sup)),hi=Math.min(nIn-1,Math.floor(c+sup));
+    let sum=0;start[o]=lo;cnt[o]=hi-lo+1;
+    for(let i=lo;i<=hi;i++){const v=lzk((i-c)/scale);w[o*maxT+i-lo]=v;sum+=v}
+    for(let i=0;i<cnt[o];i++)w[o*maxT+i]/=sum;
+  }
+  return {start,cnt,w,maxT};
+}
+/* ขยายด้วย Lanczos3 (คมกว่า bilinear ของ canvas มาก) */
+async function lanczos(img,tw,th,prog){
+  const sw=img.naturalWidth,sh=img.naturalHeight,sc=mk(sw,sh),sx=sc.getContext('2d',{willReadFrequently:true});
+  sx.drawImage(img,0,0);const src=sx.getImageData(0,0,sw,sh).data;sc.width=sc.height=0;
+  const hx=weights(tw,sw),tmp=new Float32Array(tw*sh*4);
+  for(let y=0;y<sh;y++){
+    const ro=y*sw*4,to=y*tw*4;
+    for(let x=0;x<tw;x++){
+      const st=hx.start[x],n=hx.cnt[x],wo=x*hx.maxT;let r=0,g=0,b=0,a=0;
+      for(let i=0;i<n;i++){const wv=hx.w[wo+i],p=ro+(st+i)*4;r+=src[p]*wv;g+=src[p+1]*wv;b+=src[p+2]*wv;a+=src[p+3]*wv}
+      const o=to+x*4;tmp[o]=r;tmp[o+1]=g;tmp[o+2]=b;tmp[o+3]=a;
+    }
+    if(y%64===63){prog(.25*y/sh);await tick()}
+  }
+  const vy=weights(th,sh),out=mk(tw,th),ox=out.getContext('2d',{willReadFrequently:true}),BAND=64,acc=new Float32Array(tw*4),rowLen=tw*4;
+  for(let y0=0;y0<th;y0+=BAND){
+    const y1=Math.min(th,y0+BAND),im=ox.createImageData(tw,y1-y0),d=im.data;
+    for(let oy=y0;oy<y1;oy++){
+      acc.fill(0);const st=vy.start[oy],n=vy.cnt[oy],wo=oy*vy.maxT;
+      for(let i=0;i<n;i++){const wv=vy.w[wo+i],base=(st+i)*rowLen;for(let k=0;k<rowLen;k++)acc[k]+=tmp[base+k]*wv}
+      const dst=(oy-y0)*rowLen;for(let k=0;k<rowLen;k++)d[dst+k]=acc[k];
+    }
+    ox.putImageData(im,0,y0);prog(.25+.75*y1/th);await tick();
+  }
+  return out;
+}
+/* สำรอง: ย่อ/ขยายด้วย canvas ทีละขั้น */
 async function resize(img,tw,th){
   let src=img,sw=img.naturalWidth,sh=img.naturalHeight,tmp=null;
   while(sw!==tw||sh!==th){
@@ -263,11 +303,18 @@ async function resize(img,tw,th){
   if(!tmp){tmp=mk(tw,th);const x=tmp.getContext('2d');x.drawImage(img,0,0)}
   return tmp;
 }
+async function scaleImage(img,tw,th,prog){
+  const sw=img.naturalWidth,sh=img.naturalHeight;
+  if(tw>=sw&&th>=sh&&tw*sh<=26e6){try{return await lanczos(img,tw,th,prog)}catch(e){}}
+  prog(.5);return resize(img,tw,th);
+}
+const KERNELS={1:[1,2,1],2:[1,4,6,4,1],4:[1,8,28,56,70,56,28,8,1]};
+function autoRadius(f){return f<1.8?1:f<3.5?2:4}
 
-async function sharpen(canvas,amount,r,prog){
+async function sharpen(canvas,amount,rr,prog){
   if(amount<=0)return;
   const w=canvas.width,h=canvas.height,ctx=canvas.getContext('2d',{willReadFrequently:true});
-  const k=r===1?[1,2,1]:[1,4,6,4,1],ks=k.reduce((a,b)=>a+b),BAND=96;
+  const k=KERNELS[rr],r=k.length>>1,ks=k.reduce((a,b)=>a+b),BAND=64;
   for(let y0=0;y0<h;y0+=BAND){
     const y1=Math.min(h,y0+BAND),ya=Math.max(0,y0-r),yb=Math.min(h,y1+r),bh=yb-ya;
     const src=ctx.getImageData(0,ya,w,bh),d=src.data,tmp=new Float32Array(w*bh*3);
@@ -336,8 +383,9 @@ async function run(){
     try{
       const t=target(it.w,it.h);
       it.p=5;bar();await tick();
-      const c=await resize(it.img,t.w,t.h);it.p=30;bar();
-      await sharpen(c,amt,r,f=>{it.p=30+f*60;bar()});
+      const c=await scaleImage(it.img,t.w,t.h,f=>{it.p=5+f*55;bar()});it.p=60;bar();
+      const rr=r===0?autoRadius(t.w/it.w):r;
+      await sharpen(c,amt,rr,f=>{it.p=60+f*32;bar()});
       it.p=92;bar();await tick();
       it.blob=await encode(c,fmt,q,dpi);c.width=c.height=0;
       it.out=t;it.outUrl=URL.createObjectURL(it.blob);it.ext=fmt;it.dpi=dpi;it.status='done';it.p=100;
